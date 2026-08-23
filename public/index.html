@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSGit — Code Manager</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">⬡</span> LSGit <span class="tag">Code Manager</span></div>
+  <nav>
+    <button data-view="projects" class="navbtn active">Projects</button>
+    <button data-view="upload" class="navbtn">Upload</button>
+    <button data-view="audit" class="navbtn">Audit Log</button>
+  </nav>
+</header>
+
+<main id="app">
+  <!-- Projects -->
+  <section id="view-projects" class="view">
+    <div class="view-head">
+      <h1>Projects</h1>
+      <button class="btn primary" onclick="showView('upload')">+ New Upload</button>
+    </div>
+    <div id="project-list" class="cards"></div>
+  </section>
+
+  <!-- Upload -->
+  <section id="view-upload" class="view hidden">
+    <div class="view-head"><h1>Upload Source Code</h1></div>
+    <form id="upload-form" class="panel">
+      <label>Project name <small>(optional if uploading a zip)</small>
+        <input type="text" name="name" placeholder="my-service" autocomplete="off">
+      </label>
+      <label>Description
+        <input type="text" name="description" placeholder="What does this code do?">
+      </label>
+      <label>Archive (.zip, up to 200 MB)
+        <input type="file" name="archive" accept=".zip">
+      </label>
+      <label>…or individual files (multi-select)
+        <input type="file" name="files" multiple>
+      </label>
+      <div id="upload-status"></div>
+      <button type="submit" class="btn primary" id="upload-btn">Upload</button>
+    </form>
+  </section>
+
+  <!-- Browser -->
+  <section id="view-browser" class="view hidden">
+    <div class="view-head">
+      <div>
+        <a href="#" onclick="showView('projects');return false" class="crumb">← Projects</a>
+        <h1 id="browser-title"></h1>
+        <p id="browser-meta" class="muted"></p>
+      </div>
+      <div class="head-actions">
+        <input type="search" id="search-input" placeholder="Search in project…">
+        <button class="btn danger" onclick="deleteProject()">Delete</button>
+      </div>
+    </div>
+    <div class="split">
+      <aside id="file-tree" class="tree panel"></aside>
+      <div class="panel viewer">
+        <div id="search-results" class="hidden"></div>
+        <pre id="file-view" class="hidden"><code></code></pre>
+        <div id="viewer-empty" class="empty">Select a file to view its contents</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Audit -->
+  <section id="view-audit" class="view hidden">
+    <div class="view-head"><h1>Audit Log</h1><button class="btn" onclick="loadAudit()">Refresh</button></div>
+    <table class="panel table">
+      <thead><tr><th>Time</th><th>Action</th><th>Detail</th><th>Actor</th></tr></thead>
+      <tbody id="audit-body"></tbody>
+    </table>
+  </section>
+</main>
+
+<footer class="footer muted">LSGit v0.1 · uploads stored locally under /data · max 200 MB per archive</footer>
+<script src="/app.js"></script>
+</body>
+</html>

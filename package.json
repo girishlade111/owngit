@@ -1,0 +1,17 @@
+{
+  "name": "lsgit-code-manager",
+  "version": "0.1.0",
+  "description": "Enterprise-grade code manager: upload, browse, search and manage source code repositories",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
