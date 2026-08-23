@@ -5,82 +5,147 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LSGit — Code Manager</title>
 <link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-light.min.css">
 <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><span class="logo">⬡</span> LSGit <span class="tag">Code Manager</span></div>
-  <nav>
-    <button data-view="projects" class="navbtn active">Projects</button>
-    <button data-view="upload" class="navbtn">Upload</button>
-    <button data-view="audit" class="navbtn">Audit Log</button>
-  </nav>
+
+<!-- Top navigation -->
+<header class="topnav">
+  <a class="brand" href="#" onclick="showView('projects');return false">
+    <svg width="24" height="24" viewBox="0 0 16 10" fill="#fff"><path d="M.778 1.213a.768.768 0 0 0-.768.892l1.83 10.834a.77.77 0 0 0 .757.641h11.274a.77.77 0 0 0 .756-.642l1.833-10.832a.768.768 0 0 0-.767-.893zm9.998 4.46h-5.55l.223-1.318h5.104z"/></svg>
+    <span>LSGit</span>
+  </a>
+  <div class="topnav-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="search" id="global-search" placeholder="Search projects…">
+  </div>
+  <div class="topnav-right">
+    <span class="env-badge">Local</span>
+    <div class="avatar" title="admin">AD</div>
+  </div>
 </header>
 
-<main id="app">
-  <!-- Projects -->
-  <section id="view-projects" class="view">
-    <div class="view-head">
-      <h1>Projects</h1>
-      <button class="btn primary" onclick="showView('upload')">+ New Upload</button>
-    </div>
-    <div id="project-list" class="cards"></div>
-  </section>
+<div class="shell">
+  <!-- Left icon sidebar -->
+  <nav class="sidenav">
+    <button class="sidebtn active" data-view="projects" title="Projects" onclick="showView('projects')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span class="tip">Projects</span>
+    </button>
+    <button class="sidebtn" data-view="upload" title="Upload code" onclick="showView('upload')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+      <span class="tip">Upload code</span>
+    </button>
+    <button class="sidebtn" data-view="audit" title="Audit log" onclick="showView('audit')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+      <span class="tip">Audit log</span>
+    </button>
+  </nav>
 
-  <!-- Upload -->
-  <section id="view-upload" class="view hidden">
-    <div class="view-head"><h1>Upload Source Code</h1></div>
-    <form id="upload-form" class="panel">
-      <label>Project name <small>(optional if uploading a zip)</small>
-        <input type="text" name="name" placeholder="my-service" autocomplete="off">
-      </label>
-      <label>Description
-        <input type="text" name="description" placeholder="What does this code do?">
-      </label>
-      <label>Archive (.zip, up to 200 MB)
-        <input type="file" name="archive" accept=".zip">
-      </label>
-      <label>…or individual files (multi-select)
-        <input type="file" name="files" multiple>
-      </label>
-      <div id="upload-status"></div>
-      <button type="submit" class="btn primary" id="upload-btn">Upload</button>
-    </form>
-  </section>
+  <!-- Content -->
+  <main id="app">
 
-  <!-- Browser -->
-  <section id="view-browser" class="view hidden">
-    <div class="view-head">
-      <div>
-        <a href="#" onclick="showView('projects');return false" class="crumb">← Projects</a>
+    <!-- Projects dashboard -->
+    <section id="view-projects" class="view hidden">
+      <div class="page-head">
+        <h1>Projects</h1>
+        <button class="btn primary" onclick="showView('upload')">+ Create repository</button>
+      </div>
+      <div class="card">
+        <table class="repo-table" id="project-table">
+          <thead><tr><th>Name</th><th>Description</th><th class="num">Files</th><th class="num">Size</th><th>Updated</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="project-empty" class="empty-state hidden">
+          <p><strong>Welcome to LSGit</strong></p>
+          <p class="muted">Upload source code as a zip archive or individual files to create your first repository.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Upload -->
+    <section id="view-upload" class="view hidden">
+      <div class="page-head"><h1>Create repository</h1></div>
+      <div class="card form-card">
+        <form id="upload-form">
+          <label>Name <span class="req">*</span>
+            <input type="text" name="name" placeholder="e.g. payments-service" autocomplete="off">
+          </label>
+          <label>Description
+            <input type="text" name="description" placeholder="What does this codebase contain?" autocomplete="off">
+          </label>
+          <fieldset class="upload-zone" id="drop-zone">
+            <legend>Source code</legend>
+            <div class="dz-inner">
+              <p>Drag & drop or choose files</p>
+              <div class="dz-actions">
+                <label class="btn">Choose .zip archive<input type="file" name="archive" accept=".zip" hidden></label>
+                <label class="btn">Choose files<input type="file" name="files" multiple hidden></label>
+              </div>
+              <ul id="file-picks" class="file-picks"></ul>
+              <p class="muted small">Zip up to 200 MB · executables inside archives are rejected</p>
+            </div>
+          </fieldset>
+          <div id="upload-status"></div>
+          <div class="form-actions">
+            <button type="button" class="btn" onclick="showView('projects')">Cancel</button>
+            <button type="submit" class="btn primary" id="upload-btn">Create repository</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Repository browser -->
+    <section id="view-browser" class="view hidden">
+      <div class="repo-head">
+        <a href="#" class="crumb-link" onclick="showView('projects');return false">Projects</a>
+        <span class="crumb-sep">/</span>
         <h1 id="browser-title"></h1>
-        <p id="browser-meta" class="muted"></p>
       </div>
-      <div class="head-actions">
-        <input type="search" id="search-input" placeholder="Search in project…">
-        <button class="btn danger" onclick="deleteProject()">Delete</button>
+      <div class="tabs">
+        <button class="tab active">Source</button>
+        <button class="tab" onclick="focusSearch()">Search</button>
+        <div class="tab-spacer"></div>
+        <button class="btn danger subtle" onclick="deleteProject()">Delete repository</button>
       </div>
-    </div>
-    <div class="split">
-      <aside id="file-tree" class="tree panel"></aside>
-      <div class="panel viewer">
-        <div id="search-results" class="hidden"></div>
-        <pre id="file-view" class="hidden"><code></code></pre>
-        <div id="viewer-empty" class="empty">Select a file to view its contents</div>
-      </div>
-    </div>
-  </section>
 
-  <!-- Audit -->
-  <section id="view-audit" class="view hidden">
-    <div class="view-head"><h1>Audit Log</h1><button class="btn" onclick="loadAudit()">Refresh</button></div>
-    <table class="panel table">
-      <thead><tr><th>Time</th><th>Action</th><th>Detail</th><th>Actor</th></tr></thead>
-      <tbody id="audit-body"></tbody>
-    </table>
-  </section>
-</main>
+      <div class="toolbar">
+        <div class="branch-pill">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+          main
+        </div>
+        <span id="browser-meta" class="muted"></span>
+        <input type="search" id="search-input" placeholder="Filter paths or press Enter to grep…" class="push-right">
+      </div>
+
+      <div class="split">
+        <div class="card file-pane">
+          <div class="pane-title">Files</div>
+          <div id="file-tree"></div>
+        </div>
+        <div class="card viewer">
+          <div class="pane-title" id="viewer-path">Preview</div>
+          <div id="search-results" class="hidden"></div>
+          <pre id="file-view" class="hidden"><code></code></pre>
+          <div id="viewer-empty" class="empty-state">Select a file to preview its contents</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audit -->
+    <section id="view-audit" class="view hidden">
+      <div class="page-head"><h1>Audit log</h1><button class="btn" onclick="loadAudit()">Refresh</button></div>
+      <div class="card">
+        <table class="repo-table">
+          <thead><tr><th>Time</th><th>Action</th><th>Detail</th><th>Actor</th></tr></thead>
+          <tbody id="audit-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
 
 <footer class="footer muted">LSGit v0.1 · uploads stored locally under /data · max 200 MB per archive</footer>
 <script src="/app.js"></script>

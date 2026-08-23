@@ -26,39 +26,60 @@ async function api(path, opts) {
 function showView(name) {
   document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
   $('#view-' + name).classList.remove('hidden');
-  document.querySelectorAll('.navbtn').forEach((b) =>
+  document.querySelectorAll('.sidebtn').forEach((b) =>
     b.classList.toggle('active', b.dataset.view === name || (name === 'browser' && b.dataset.view === 'projects'))
   );
   if (name === 'projects') loadProjects();
   if (name === 'audit') loadAudit();
 }
 
-document.querySelectorAll('.navbtn').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
+document.querySelectorAll('.sidebtn').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
 
 // --- Projects ---------------------------------------------------------------
 
 async function loadProjects() {
   const data = await api('/api/projects');
   state.projects = data.projects;
-  const list = $('#project-list');
-  if (data.projects.length === 0) {
-    list.innerHTML = '<p class="muted">No projects yet. Upload source code to get started.</p>';
+  renderProjectTable(data.projects);
+}
+
+function renderProjectTable(projects) {
+  const tbody = document.querySelector('#project-table tbody');
+  const empty = $('#project-empty');
+  const table = $('#project-table');
+  if (projects.length === 0) {
+    table.classList.add('hidden');
+    empty.classList.remove('hidden');
+    tbody.innerHTML = '';
     return;
   }
-  list.innerHTML = data.projects
+  table.classList.remove('hidden');
+  empty.classList.add('hidden');
+  tbody.innerHTML = projects
     .map(
       (p) => `
-    <div class="card panel" onclick="openProject('${p.id}')">
-      <h3>${esc(p.name)}</h3>
-      <div class="desc">${esc(p.description || p.source)}</div>
-      <div class="stats"><span>📄 ${p.fileCount} files</span><span>💾 ${fmtBytes(p.totalBytes)}</span></div>
-      <div class="foot"><span>${new Date(p.createdAt).toLocaleString()}</span><span>${esc(p.id.slice(0, 8))}</span></div>
-    </div>`
+      <tr onclick="openProject('${p.id}')">
+        <td><span class="repo-name">${esc(p.name)}</span></td>
+        <td class="muted">${esc(p.description || p.source)}</td>
+        <td class="num muted">${p.fileCount}</td>
+        <td class="num muted">${fmtBytes(p.totalBytes)}</td>
+        <td class="muted">${new Date(p.createdAt).toLocaleDateString()}</td>
+      </tr>`
     )
     .join('');
 }
 
+$('#global-search').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  renderProjectTable(state.projects.filter((p) => p.name.toLowerCase().includes(q)));
+});
+
 // --- Browser ----------------------------------------------------------------
+
+const FILE_ICONS = { '.js': '🟨', '.ts': '🟦', '.py': '🐍', '.json': '⚙️', '.md': '📘', '.html': '🌐' };
+function fileIcon(p) {
+  return FILE_ICONS[p.slice(p.lastIndexOf('.')).toLowerCase()] || '📄';
+}
 
 async function openProject(id) {
   const data = await api(`/api/projects/${id}/tree`);
@@ -66,8 +87,8 @@ async function openProject(id) {
   state.tree = data.entries;
   $('#browser-title').textContent = data.project.name;
   $('#browser-meta').textContent =
-    `${data.project.fileCount} files · ${fmtBytes(data.project.totalBytes)} · created ${new Date(data.project.createdAt).toLocaleString()}`;
-  renderTree();
+    `${data.project.fileCount} files · ${fmtBytes(data.project.totalBytes)} · created ${new Date(data.project.createdAt).toLocaleDateString()}`;
+  renderTree($('#search-input').value.trim());
   showView('browser');
 }
 
@@ -79,85 +100,87 @@ function renderTree(filter = '') {
   const dirs = entries.filter((e) => e.type === 'dir');
   const files = entries.filter((e) => e.type === 'file');
   tree.innerHTML =
-    dirs.map((e) => `<div class="dir">📁 ${esc(e.path)}/</div>`).join('') +
+    dirs.map((e) => `<div class="tree-dir">📁 ${esc(e.path)}/</div>`).join('') +
     files
-      .map((e) => `<div class="file" data-path="${esc(e.path)}" onclick="viewFile('${esc(e.path)}')">📄 ${esc(e.path)}</div>`)
-      .join('') || '<p class="muted" style="padding:8px">No matches</p>';
+      .map(
+        (e) =>
+          `<div class="tree-file" data-path="${esc(e.path)}" onclick="viewFile('${esc(e.path)}')">` +
+          `<span>${fileIcon(e.path)}</span><span>${esc(e.path)}</span></div>`
+      )
+      .join('') || '<div class="empty-state">No matching files</div>';
 }
 
-async function viewFile(path, highlightLine = null) {
-  document.getElementById('search-results').classList.add('hidden');
-  const empty = $('#viewer-empty');
-  empty.classList.add('hidden');
+async function viewFile(path) {
+  $('#search-results').classList.add('hidden');
+  $('#viewer-empty').classList.add('hidden');
+  $('#viewer-path').textContent = path;
   const pre = $('#file-view');
   pre.classList.remove('hidden');
-  document.querySelectorAll('.tree .file').forEach((f) => f.classList.toggle('active', f.dataset.path === path));
+  pre.setAttribute('data-file', path);
+  document.querySelectorAll('.tree-file').forEach((f) => f.classList.toggle('active', f.dataset.path === path));
 
   try {
     const data = await api(`/api/projects/${state.current.id}/file?path=${encodeURIComponent(path)}`);
     const code = pre.querySelector('code');
     if (data.binary) {
-      pre.innerHTML = `<div class="binary-note">Binary file (${fmtBytes(data.size)}) — <a style="color:var(--accent)" href="/api/projects/${state.current.id}/raw?path=${encodeURIComponent(path)}">download</a></div>`;
+      pre.innerHTML = `<div class="binary-note">Binary file (${fmtBytes(data.size)}) — <a href="/api/projects/${state.current.id}/raw?path=${encodeURIComponent(path)}">download</a></div>`;
       return;
     }
     code.textContent = data.content;
     delete code.dataset.highlighted;
     hljs.highlightElement(code);
-    if (highlightLine) {
-      setTimeout(() => {
-        const lines = pre.textContent.split('\n');
-        void lines;
-        const el = code.querySelector('.hljs-ln-line:nth-child(' + highlightLine + ')');
-        if (el) el.scrollIntoView({ block: 'center' });
-      }, 50);
-    }
-    pre.setAttribute('data-file', path);
   } catch (err) {
-    code.textContent = err.message;
+    pre.querySelector('code').textContent = err.message;
   }
-}
-
-$('#search-input').addEventListener('input', (e) => {
-  const q = e.target.value.trim();
-  if (!q) {
-    $('#search-results').classList.add('hidden');
-    $('#file-view').classList.remove('hidden');
-    $('#viewer-empty').classList.toggle('hidden', !!preHasFile());
-    return;
-  }
-  searchProject(q);
-});
-
-function preHasFile() {
-  return $('#file-view').getAttribute('data-file');
 }
 
 let searchSeq = 0;
-async function searchProject(q) {
+$('#search-input').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim();
+  if (!q || !state.current) return;
   const seq = ++searchSeq;
   const data = await api(`/api/projects/${state.current.id}/search?q=${encodeURIComponent(q)}`);
   if (seq !== searchSeq) return;
   $('#file-view').classList.add('hidden');
+  $('#viewer-empty').classList.add('hidden');
+  $('#viewer-path').textContent = `Results for "${q}"`;
   const box = $('#search-results');
   box.classList.remove('hidden');
   box.innerHTML =
-    `<p class="muted">${data.results.length}${data.truncated ? '+' : ''} results for "${esc(q)}"</p>` +
+    `<div class="search-head">${data.results.length}${data.truncated ? '+' : ''} matches — click a result to open the file</div>` +
     data.results
       .map(
         (r) =>
           `<div class="search-hit" onclick="viewFile('${esc(r.path)}')"><b>${esc(r.path)}:${r.line}</b> — ${esc(r.text)}</div>`
       )
       .join('');
+});
+
+function focusSearch() {
+  $('#search-input').focus();
 }
 
 async function deleteProject() {
-  if (!confirm(`Delete project "${state.current.name}" and all its files?`)) return;
+  if (!confirm(`Delete repository "${state.current.name}" and all of its files? This cannot be undone.`)) return;
   await api('/api/projects/' + state.current.id, { method: 'DELETE' });
   state.current = null;
   showView('projects');
 }
 
 // --- Upload -----------------------------------------------------------------
+
+const archiveInput = document.querySelector('#upload-form input[name=archive]');
+const filesInput = document.querySelector('#upload-form input[name=files]');
+
+function refreshPicks() {
+  const picks = [];
+  if (archiveInput.files[0]) picks.push(`${archiveInput.files[0].name} (${fmtBytes(archiveInput.files[0].size)})`);
+  for (const f of filesInput.files) picks.push(f.name);
+  $('#file-picks').innerHTML = picks.map((p) => `<li>${esc(p)}</li>`).join('');
+}
+archiveInput.addEventListener('change', refreshPicks);
+filesInput.addEventListener('change', refreshPicks);
 
 $('#upload-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -180,19 +203,20 @@ $('#upload-form').addEventListener('submit', async (e) => {
 
   const btn = $('#upload-btn');
   btn.disabled = true;
-  btn.textContent = 'Uploading…';
+  btn.textContent = 'Creating…';
   try {
     const data = await api('/api/projects/upload', { method: 'POST', body: fd });
     status.className = 'ok';
-    status.textContent = `Uploaded "${data.project.name}" (${data.project.fileCount} files).`;
+    status.textContent = `Repository "${data.project.name}" created with ${data.project.fileCount} files.`;
     form.reset();
-    setTimeout(() => openProject(data.project.id), 600);
+    refreshPicks();
+    setTimeout(() => openProject(data.project.id), 500);
   } catch (err) {
     status.className = 'err';
     status.textContent = err.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Upload';
+    btn.textContent = 'Create repository';
   }
 });
 
@@ -203,10 +227,10 @@ async function loadAudit() {
   $('#audit-body').innerHTML = data.events
     .map(
       (e) =>
-        `<tr><td>${new Date(e.ts).toLocaleString()}</td><td><code>${esc(e.action)}</code></td>` +
-        `<td>${esc(e.projectId ? e.projectId.slice(0, 8) : '')} ${esc(e.query || e.name || '')}</td><td>${esc(e.actor || '')}</td></tr>`
+        `<tr><td class="muted">${new Date(e.ts).toLocaleString()}</td><td><code>${esc(e.action)}</code></td>` +
+        `<td class="muted">${esc(e.name || e.query || e.projectId?.slice(0, 8) || '')}</td><td class="muted">${esc(e.actor || '')}</td></tr>`
     )
-    .join('') || '<tr><td colspan="4" class="muted">No audit events yet</td></tr>';
+    .join('') || '<tr><td colspan="4"><div class="empty-state">No audit events yet</div></td></tr>';
 }
 
 showView('projects');
