@@ -127,6 +127,64 @@ function dirSize(dir) {
   return storage.walk(dir, dir).reduce((s, e) => s + e.size, 0);
 }
 
+// Add files to an existing project via drag & drop
+const addToProject = upload.fields([{ name: 'files' }, { name: 'archive' }]);
+app.post('/api/projects/:id/files', addToProject, (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const archive = (req.files.archive || [])[0];
+  const looseFiles = req.files.files || [];
+  if (!archive && looseFiles.length === 0) {
+    return res.status(400).json({ error: 'No files provided' });
+  }
+  const destDir = path.join(storage.REPOS_DIR, ctx.project.id);
+  let added = 0;
+  try {
+    if (archive) {
+      const tmpDir = path.join(storage.DATA_DIR, 'merge-' + crypto.randomBytes(8).toString('hex'));
+      fs.mkdirSync(tmpDir, { recursive: true });
+      try {
+        storage.extractZip(archive.path, tmpDir, archive.originalname);
+        fs.unlinkSync(archive.path);
+        added += mergeTree(tmpDir, destDir);
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch (err) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        throw err;
+      }
+    }
+    for (const f of looseFiles) {
+      const rel = f.originalname.replace(/\\/g, '/').replace(/^(\.\.\/)+/, '');
+      if (storage.BLOCKED_EXTENSIONS.has(path.extname(rel).toLowerCase())) continue;
+      const target = storage.safeResolve(destDir, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.renameSync(f.path, target);
+      added++;
+    }
+    touchProject(ctx, { fileCount: countFiles(destDir), totalBytes: dirSize(destDir) });
+    storage.audit({ action: 'project.upload', projectId: ctx.project.id, count: added, actor: req.ip });
+    res.json({ ok: true, added, project: publicProject(ctx.project) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function mergeTree(srcDir, destDir) {
+  let count = 0;
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const src = path.join(srcDir, entry.name);
+    const dst = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      count += mergeTree(src, dst);
+    } else {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(src, dst);
+      count++;
+    }
+  }
+  return count;
+}
+
 app.get('/api/projects/:id/tree', (req, res, next) => {
   const ctx = getProjectOr404(req, res);
   if (!ctx) return;

@@ -297,6 +297,7 @@ async function deleteProject() {
 
 // --- Upload -----------------------------------------------------------------
 
+const form = document.getElementById('upload-form');
 const archiveInput = document.querySelector('#upload-form input[name=archive]');
 const filesInput = document.querySelector('#upload-form input[name=files]');
 
@@ -308,6 +309,76 @@ function refreshPicks() {
 }
 archiveInput.addEventListener('change', refreshPicks);
 filesInput.addEventListener('change', refreshPicks);
+
+// Drag & drop onto the upload form
+const dropZone = $('#drop-zone');
+['dragenter', 'dragover'].forEach((evt) =>
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragging');
+  })
+);
+['dragleave', 'drop'].forEach((evt) =>
+  dropZone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragging');
+  })
+);
+dropZone.addEventListener('drop', (e) => {
+  const { files } = e.dataTransfer;
+  if (!files.length) return;
+  const list = [...files];
+  const isSingleZip = list.length === 1 && list[0].name.toLowerCase().endsWith('.zip');
+  if (isSingleZip) {
+    archiveInput.files = e.dataTransfer.files;
+    if (!form.name.value) form.name.value = list[0].name.replace(/\.zip$/i, '');
+  } else {
+    filesInput.files = e.dataTransfer.files;
+    if (!form.name.value) form.name.value = '';
+  }
+  refreshPicks();
+});
+
+// Drag & drop into an open repository
+const repoDrop = $('#drop-target');
+const dropOverlay = $('#drop-overlay');
+let dragDepth = 0;
+
+function hasFiles(e) {
+  return e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+}
+
+repoDrop.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  dropOverlay.classList.remove('hidden');
+});
+repoDrop.addEventListener('dragover', (e) => {
+  if (hasFiles(e)) e.preventDefault();
+});
+repoDrop.addEventListener('dragleave', () => {
+  dragDepth = Math.max(dragDepth - 1, 0);
+  if (dragDepth === 0) dropOverlay.classList.add('hidden');
+});
+repoDrop.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropOverlay.classList.add('hidden');
+  if (!state.current || !e.dataTransfer.files.length) return;
+  const fd = new FormData();
+  for (const f of e.dataTransfer.files) fd.append('files', f);
+  try {
+    const data = await api(`/api/projects/${state.current.id}/files`, { method: 'POST', body: fd });
+    const treeData = await api(`/api/projects/${state.current.id}/tree`);
+    state.tree = treeData.entries;
+    Object.assign(state.current, data.project);
+    renderTree($('#search-input').value.trim());
+    refreshProjectMeta();
+  } catch (err) {
+    alert('Upload failed: ' + err.message);
+  }
+});
 
 $('#upload-form').addEventListener('submit', async (e) => {
   e.preventDefault();
