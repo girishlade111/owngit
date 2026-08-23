@@ -3,49 +3,53 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LSGit — Code Manager</title>
+<title>LSGit — Local Code Manager</title>
 <link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="/vendor/atom-one-light.min.css">
+<link rel="stylesheet" href="/vendor/atom-one-dark.min.css">
 <script src="/vendor/highlight.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
 <script src="/vendor/purify.min.js"></script>
 </head>
 <body>
 
-<!-- Top navigation -->
-<header class="topnav">
+<!-- Fixed left sidebar -->
+<aside class="sidebar">
   <a class="brand" href="#" onclick="showView('projects');return false">
-    <svg width="24" height="24" viewBox="0 0 16 10" fill="#fff"><path d="M.778 1.213a.768.768 0 0 0-.768.892l1.83 10.834a.77.77 0 0 0 .757.641h11.274a.77.77 0 0 0 .756-.642l1.833-10.832a.768.768 0 0 0-.767-.893zm9.998 4.46h-5.55l.223-1.318h5.104z"/></svg>
+    <svg width="20" height="20" viewBox="0 0 16 10" fill="currentColor"><path d="M.778 1.213a.768.768 0 0 0-.768.892l1.83 10.834a.77.77 0 0 0 .757.641h11.274a.77.77 0 0 0 .756-.642l1.833-10.832a.768.768 0 0 0-.767-.893zm9.998 4.46h-5.55l.223-1.318h5.104z"/></svg>
     <span>LSGit</span>
   </a>
-  <div class="topnav-search">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="search" id="global-search" placeholder="Search projects…">
-  </div>
-  <div class="topnav-right">
-    <span class="env-badge">Local</span>
-    <div class="avatar" title="admin">AD</div>
-  </div>
-</header>
 
-<div class="shell">
-  <!-- Left icon sidebar -->
-  <nav class="sidenav">
-    <button class="sidebtn active" data-view="projects" title="Projects" onclick="showView('projects')">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      <span class="tip">Projects</span>
+  <nav class="side-nav">
+    <button class="sidebtn active" data-view="projects" onclick="showView('projects')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>Projects</span>
     </button>
-    <button class="sidebtn" data-view="upload" title="Upload code" onclick="showView('upload')">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
-      <span class="tip">Upload code</span>
+    <button class="sidebtn" data-view="upload" onclick="showView('upload')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+      <span>Upload code</span>
     </button>
-    <button class="sidebtn" data-view="audit" title="Audit log" onclick="showView('audit')">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-      <span class="tip">Audit log</span>
+    <button class="sidebtn" data-view="audit" onclick="showView('audit')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+      <span>Audit log</span>
     </button>
   </nav>
 
-  <!-- Content -->
+  <div class="side-foot">
+    <div class="side-foot-note">Local-first code manager.<br>Your data never leaves this device.</div>
+  </div>
+</aside>
+
+<div class="main-wrap">
+
+  <!-- Slim topbar -->
+  <header class="topbar">
+    <div class="topbar-search">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="search" id="global-search" placeholder="Search projects…">
+    </div>
+    <span class="badge">Local</span>
+  </header>
+
   <main id="app">
 
     <!-- Projects dashboard -->
@@ -60,7 +64,7 @@
           <tbody></tbody>
         </table>
         <div id="project-empty" class="empty-state hidden">
-          <p><strong>Welcome to LSGit</strong></p>
+          <p><strong>No repositories yet</strong></p>
           <p class="muted">Upload source code as a zip archive or individual files to create your first repository.</p>
         </div>
       </div>
@@ -71,12 +75,14 @@
       <div class="page-head"><h1>Create repository</h1></div>
       <div class="card form-card">
         <form id="upload-form">
-          <label>Name <span class="req">*</span>
-            <input type="text" name="name" placeholder="e.g. payments-service" autocomplete="off">
-          </label>
-          <label>Description
-            <input type="text" name="description" placeholder="What does this codebase contain?" autocomplete="off">
-          </label>
+          <div class="field">
+            <label class="field-label" for="uf-name">Name <span class="req">*</span></label>
+            <input type="text" id="uf-name" name="name" placeholder="e.g. payments-service" autocomplete="off">
+          </div>
+          <div class="field">
+            <label class="field-label" for="uf-desc">Description</label>
+            <input type="text" id="uf-desc" name="description" placeholder="What does this codebase contain?" autocomplete="off">
+          </div>
           <fieldset class="upload-zone" id="drop-zone">
             <legend>Source code</legend>
             <div class="dz-inner">
@@ -110,7 +116,7 @@
         <button class="tab" data-repotab="stats">Insights</button>
         <div class="tab-spacer"></div>
         <button class="btn" onclick="renameProject()">Rename</button>
-        <a class="btn" id="download-btn" title="Download as zip">⬇ Download zip</a>
+        <a class="btn" id="download-btn" title="Download as zip">Download zip</a>
         <button class="btn primary" onclick="newFile()">+ New file</button>
         <button class="btn danger subtle" onclick="deleteProject()">Delete repository</button>
       </div>
@@ -119,7 +125,7 @@
       <div id="repo-source">
         <div class="bb-toolbar">
           <div class="branch-pill">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
             main
           </div>
           <nav class="bb-crumbs" id="bb-crumbs" aria-label="Breadcrumb"></nav>
@@ -148,10 +154,10 @@
       <!-- Stats tab -->
       <div id="repo-stats" class="hidden">
         <div class="stat-cards">
-          <div class="card stat-card"><div class="stat-num" id="stat-files">–</div><div class="muted">Files</div></div>
-          <div class="card stat-card"><div class="stat-num" id="stat-lines">–</div><div class="muted">Lines of code</div></div>
-          <div class="card stat-card"><div class="stat-num" id="stat-langs">–</div><div class="muted">Languages</div></div>
-          <div class="card stat-card"><div class="stat-num" id="stat-size">–</div><div class="muted">Total size</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-files">–</div><div class="stat-label">Files</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-lines">–</div><div class="stat-label">Lines of code</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-langs">–</div><div class="stat-label">Languages</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-size">–</div><div class="stat-label">Total size</div></div>
         </div>
         <div class="card lang-card">
           <div class="pane-title">Languages</div>
@@ -163,7 +169,10 @@
 
     <!-- Audit -->
     <section id="view-audit" class="view hidden">
-      <div class="page-head"><h1>Audit log</h1><button class="btn" onclick="loadAudit()">Refresh</button></div>
+      <div class="page-head">
+        <h1>Audit log</h1>
+        <button class="btn" onclick="loadAudit()">Refresh</button>
+      </div>
       <div class="card">
         <table class="repo-table">
           <thead><tr><th>Time</th><th>Action</th><th>Detail</th><th>Actor</th></tr></thead>
@@ -175,7 +184,6 @@
   </main>
 </div>
 
-<footer class="footer muted">LSGit v0.1 · uploads stored locally under /data · max 200 MB per archive</footer>
 <script src="/app.js"></script>
 </body>
 </html>
