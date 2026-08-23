@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LSGit — Code Manager</title>
 <link rel="stylesheet" href="/style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-light.min.css">
-<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<link rel="stylesheet" href="/vendor/atom-one-light.min.css">
+<script src="/vendor/highlight.min.js"></script>
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/purify.min.js"></script>
 </head>
 <body>
 
@@ -113,42 +115,34 @@
         <button class="btn danger subtle" onclick="deleteProject()">Delete repository</button>
       </div>
 
-      <!-- Source tab -->
+      <!-- Source tab (Bitbucket-style) -->
       <div id="repo-source">
-      <div class="toolbar">
-        <div class="branch-pill">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-          main
-        </div>
-        <span id="browser-meta" class="muted"></span>
-        <div class="push-right search-group">
-          <input type="search" id="search-input" placeholder='Search… ("regex" or "Aa" for options)'>
-          <label class="toggle" title="Regular expression"><input type="checkbox" id="opt-regex"><span>.*</span></label>
-          <label class="toggle" title="Case sensitive"><input type="checkbox" id="opt-case"><span>Aa</span></label>
-        </div>
-      </div>
-
-      <div class="split">
-        <div class="card file-pane" id="drop-target">
-          <div class="pane-title">Files</div>
-          <div id="file-tree"></div>
-          <div class="drop-overlay hidden" id="drop-overlay"><span>Drop files to add them to this repository</span></div>
-        </div>
-        <div class="card viewer">
-          <div class="viewer-head">
-            <span class="pane-title-inline" id="viewer-path">Preview</span>
-            <div class="viewer-actions">
-              <button class="btn small" id="edit-btn" onclick="startEdit()">Edit</button>
-              <button class="btn small primary hidden" id="save-btn" onclick="saveFile()">Save</button>
-              <button class="btn small hidden" id="cancel-btn" onclick="cancelEdit()">Cancel</button>
-            </div>
+        <div class="bb-toolbar">
+          <div class="branch-pill">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            main
           </div>
-          <div id="search-results" class="hidden"></div>
-          <textarea id="editor" class="hidden" spellcheck="false"></textarea>
-          <pre id="file-view" class="hidden"><code></code></pre>
-          <div id="viewer-empty" class="empty-state">Select a file to preview its contents</div>
+          <nav class="bb-crumbs" id="bb-crumbs" aria-label="Breadcrumb"></nav>
+          <div class="push-right search-group">
+            <input type="search" id="search-input" placeholder='Search in repository… ("regex" or "Aa" for options)'>
+            <label class="toggle" title="Regular expression"><input type="checkbox" id="opt-regex"><span>.*</span></label>
+            <label class="toggle" title="Case sensitive"><input type="checkbox" id="opt-case"><span>Aa</span></label>
+          </div>
         </div>
-      </div>
+
+        <div class="bb-split">
+          <aside class="bb-side card">
+            <div class="bb-side-head">
+              <input type="search" id="tree-filter" placeholder="Filter by file name…" autocomplete="off">
+            </div>
+            <nav id="file-tree" aria-label="File tree"></nav>
+          </aside>
+
+          <section class="bb-content card" id="drop-target">
+            <div id="bb-content"></div>
+            <div class="drop-overlay hidden" id="drop-overlay"><span>Drop files to add them to this repository</span></div>
+          </section>
+        </div>
       </div>
 
       <!-- Stats tab -->
