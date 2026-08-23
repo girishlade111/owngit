@@ -402,17 +402,23 @@ $('#upload-form').addEventListener('submit', async (e) => {
   const btn = $('#upload-btn');
   btn.disabled = true;
   btn.textContent = 'Creating…';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10 * 60 * 1000);
   try {
-    const data = await api('/api/projects/upload', { method: 'POST', body: fd });
+    const data = await api('/api/projects/upload', { method: 'POST', body: fd, signal: controller.signal });
     status.className = 'ok';
-    status.textContent = `Repository "${data.project.name}" created with ${data.project.fileCount} files.`;
+    const skipped = data.skippedFiles || [];
+    let msg = `Repository "${data.project.name}" created with ${data.project.fileCount} files.`;
+    if (skipped.length) msg += ` Skipped ${skipped.length} blocked file(s): ${skipped.slice(0, 5).map((s) => s.split('/').pop()).join(', ')}${skipped.length > 5 ? '…' : ''}`;
+    status.textContent = msg;
     form.reset();
     refreshPicks();
     setTimeout(() => openProject(data.project.id), 500);
   } catch (err) {
     status.className = 'err';
-    status.textContent = err.message;
+    status.textContent = err.name === 'AbortError' ? 'Upload timed out. Please try again.' : err.message;
   } finally {
+    clearTimeout(timer);
     btn.disabled = false;
     btn.textContent = 'Create repository';
   }

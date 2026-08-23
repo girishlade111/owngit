@@ -22,7 +22,7 @@ const upload = multer({
     destination: (_req, _file, cb) => cb(null, storage.DATA_DIR),
     filename: (_req, file, cb) => cb(null, 'upload-' + crypto.randomBytes(8).toString('hex')),
   }),
-  limits: { fileSize: storage.MAX_UPLOAD_BYTES, files: 50 },
+  limits: { fileSize: storage.MAX_UPLOAD_BYTES, files: 5000 },
   fileFilter: (_req, file, cb) => {
     cb(null, true);
   },
@@ -108,9 +108,12 @@ app.post('/api/projects/upload', upload.fields([{ name: 'files' }, { name: 'arch
     saveMeta(meta);
 
     storage.audit({ action: 'project.create', projectId: id, name: project.name, actor: req.ip });
-    res.status(201).json({ project });
+    res.status(201).json({ project, skippedFiles: stats.skipped || [] });
   } catch (err) {
     fs.rmSync(destDir, { recursive: true, force: true });
+    for (const f of [...looseFiles, ...(archive ? [archive] : [])]) {
+      if (f.path) fs.rmSync(f.path, { force: true });
+    }
     next(err);
   }
 });
