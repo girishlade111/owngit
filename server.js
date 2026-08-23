@@ -160,7 +160,7 @@ app.get('/api/projects/:id/file', (req, res, next) => {
   }
 });
 
-app.get('/api/projects/:id/raw', (req, res) => {
+app.get('/api/projects/:id/raw', (req, res, next) => {
   const ctx = getProjectOr404(req, res);
   if (!ctx) return;
   try {
@@ -172,11 +172,154 @@ app.get('/api/projects/:id/raw', (req, res) => {
   }
 });
 
+// Save (create or update) a file
+app.put('/api/projects/:id/file', (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const rel = String(req.body.path || '').replace(/\\/g, '/');
+  const content = typeof req.body.content === 'string' ? req.body.content : null;
+  if (!rel || content === null) return res.status(400).json({ error: 'path and content are required' });
+  try {
+    const repoPath = path.join(storage.REPOS_DIR, ctx.project.id);
+    const filePath = storage.safeResolve(repoPath, rel);
+    if (storage.BLOCKED_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+      return res.status(400).json({ error: 'Blocked file type: ' + path.extname(filePath) });
+    }
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, content, 'utf8');
+    touchProject(ctx, { fileCount: countFiles(repoPath), totalBytes: dirSize(repoPath) });
+    storage.audit({ action: 'file.save', projectId: ctx.project.id, path: rel, actor: req.ip });
+    res.json({ ok: true, path: rel });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/projects/:id/file', (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    const repoPath = path.join(storage.REPOS_DIR, ctx.project.id);
+    const filePath = storage.safeResolve(repoPath, String(req.query.path || ''));
+    fs.rmSync(filePath);
+    touchProject(ctx, { fileCount: countFiles(repoPath), totalBytes: dirSize(repoPath) });
+    storage.audit({ action: 'file.delete', projectId: ctx.project.id, path: String(req.query.path), actor: req.ip });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Rename project / edit description
+app.patch('/api/projects/:id', (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const name = (typeof req.body.name === 'string' && req.body.name.trim()) || ctx.project.name;
+  const description = typeof req.body.description === 'string'
+    ? req.body.description.trim()
+    : ctx.project.description;
+  ctx.project.name = name;
+  ctx.project.description = description;
+  touchProject(ctx);
+  storage.audit({ action: 'project.update', projectId: ctx.project.id, name, actor: req.ip });
+  res.json({ project: publicProject(ctx.project) });
+});
+
+// Download whole project as zip
+app.get('/api/projects/:id/archive', (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    const AdmZip = require('adm-zip');
+    const zip = new AdmZip();
+    const repoPath = path.join(storage.REPOS_DIR, ctx.project.id);
+    for (const entry of storage.walk(repoPath, repoPath)) {
+      const abs = path.join(repoPath, entry.path);
+      if (entry.type === 'dir') zip.addFile(entry.path + '/', Buffer.alloc(0));
+      else zip.addLocalFile(abs, path.dirname(entry.path) === '.' ? '' : path.dirname(entry.path), path.basename(entry.path));
+    }
+    storage.audit({ action: 'project.export', projectId: ctx.project.id, actor: req.ip });
+    res.set('Content-Disposition', `attachment; filename="${storage.sanitizeName(ctx.project.name)}.zip"`);
+    res.send(zip.toBuffer());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Code statistics: language breakdown and line counts
+app.get('/api/projects/:id/stats', (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    const repoPath = path.join(storage.REPOS_DIR, ctx.project.id);
+    const LANGS = {
+      '.js': 'JavaScript', '.mjs': 'JavaScript', '.cjs': 'JavaScript',
+      '.ts': 'TypeScript', '.tsx': 'TypeScript', '.jsx': 'JavaScript',
+      '.py': 'Python', '.rb': 'Ruby', '.go': 'Go', '.rs': 'Rust',
+      '.java': 'Java', '.kt': 'Kotlin', '.swift': 'Swift', '.c': 'C',
+      '.h': 'C/C++ Header', '.cpp': 'C++', '.cs': 'C#', '.php': 'PHP',
+      '.sh': 'Shell', '.bash': 'Shell', '.html': 'HTML', '.css': 'CSS',
+      '.scss': 'SCSS', '.json': 'JSON', '.yml': 'YAML', '.yaml': 'YAML',
+      '.md': 'Markdown', '.sql': 'SQL', '.toml': 'TOML', '.xml': 'XML',
+    };
+    const langs = {};
+    let totalLines = 0;
+    let codeFiles = 0;
+    for (const entry of storage.walk(repoPath, repoPath)) {
+      if (entry.type !== 'file') continue;
+      codeFiles++;
+      const ext = path.extname(entry.path).toLowerCase();
+      let lines = 1;
+      if (entry.size <= storage.MAX_FILE_VIEW_BYTES && !storage.isBinary(fs.readFileSync(path.join(repoPath, entry.path)).subarray(0, 8000))) {
+        lines = fs.readFileSync(path.join(repoPath, entry.path), 'utf8').split('\n').length;
+        totalLines += lines;
+      }
+      const lang = LANGS[ext] || (ext ? 'Other (' + ext + ')' : 'No extension');
+      const bucket = (langs[lang] ||= { files: 0, lines: 0, bytes: 0 });
+      bucket.files++;
+      bucket.lines += lines;
+      bucket.bytes += entry.size;
+    }
+    const breakdown = Object.entries(langs)
+      .map(([language, s]) => ({ language, ...s }))
+      .sort((a, b) => b.lines - a.lines);
+    res.json({ project: publicProject(ctx.project), totalFiles: codeFiles, totalLines, languages: breakdown });
+  } catch (err) {
+    next(err);
+  }
+});
+
+function touchProject(ctx, extra = {}) {
+  Object.assign(ctx.project, { updatedAt: new Date().toISOString() }, extra);
+  saveMeta(ctx.meta);
+}
+
+function publicProject(p) {
+  const { id, name, description, createdAt, updatedAt, fileCount, totalBytes, source } = p;
+  return { id, name, description, createdAt, updatedAt, fileCount, totalBytes, source };
+}
+
+function matchLine(line, q, useRegex, caseSensitive) {
+  if (useRegex) {
+    let re;
+    try {
+      re = new RegExp(q, caseSensitive ? '' : 'i');
+    } catch {
+      return -1;
+    }
+    const m = re.exec(line);
+    return m ? m.index : -1;
+  }
+  return line.indexOf(q);
+}
+
 app.get('/api/projects/:id/search', (req, res) => {
   const ctx = getProjectOr404(req, res);
   if (!ctx) return;
   const q = String(req.query.q || '').trim();
   if (!q) return res.json({ query: q, results: [] });
+  const useRegex = req.query.regex === '1';
+  const caseSensitive = req.query.case === '1';
   try {
     const repoPath = path.join(storage.REPOS_DIR, ctx.project.id);
     const results = [];
@@ -187,7 +330,7 @@ app.get('/api/projects/:id/search', (req, res) => {
       if (storage.isBinary(buf)) continue;
       const lines = buf.toString('utf8').split('\n');
       lines.forEach((line, i) => {
-        const idx = line.indexOf(q);
+        const idx = matchLine(line, q, useRegex, caseSensitive);
         if (idx !== -1 && results.length < 200) {
           results.push({
             path: entry.path,

@@ -104,19 +104,28 @@
         <h1 id="browser-title"></h1>
       </div>
       <div class="tabs">
-        <button class="tab active">Source</button>
-        <button class="tab" onclick="focusSearch()">Search</button>
+        <button class="tab active" data-repotab="source">Source</button>
+        <button class="tab" data-repotab="stats">Insights</button>
         <div class="tab-spacer"></div>
+        <button class="btn" onclick="renameProject()">Rename</button>
+        <a class="btn" id="download-btn" title="Download as zip">⬇ Download zip</a>
+        <button class="btn primary" onclick="newFile()">+ New file</button>
         <button class="btn danger subtle" onclick="deleteProject()">Delete repository</button>
       </div>
 
+      <!-- Source tab -->
+      <div id="repo-source">
       <div class="toolbar">
         <div class="branch-pill">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
           main
         </div>
         <span id="browser-meta" class="muted"></span>
-        <input type="search" id="search-input" placeholder="Filter paths or press Enter to grep…" class="push-right">
+        <div class="push-right search-group">
+          <input type="search" id="search-input" placeholder='Search… ("regex" or "Aa" for options)'>
+          <label class="toggle" title="Regular expression"><input type="checkbox" id="opt-regex"><span>.*</span></label>
+          <label class="toggle" title="Case sensitive"><input type="checkbox" id="opt-case"><span>Aa</span></label>
+        </div>
       </div>
 
       <div class="split">
@@ -125,10 +134,34 @@
           <div id="file-tree"></div>
         </div>
         <div class="card viewer">
-          <div class="pane-title" id="viewer-path">Preview</div>
+          <div class="viewer-head">
+            <span class="pane-title-inline" id="viewer-path">Preview</span>
+            <div class="viewer-actions">
+              <button class="btn small" id="edit-btn" onclick="startEdit()">Edit</button>
+              <button class="btn small primary hidden" id="save-btn" onclick="saveFile()">Save</button>
+              <button class="btn small hidden" id="cancel-btn" onclick="cancelEdit()">Cancel</button>
+            </div>
+          </div>
           <div id="search-results" class="hidden"></div>
+          <textarea id="editor" class="hidden" spellcheck="false"></textarea>
           <pre id="file-view" class="hidden"><code></code></pre>
           <div id="viewer-empty" class="empty-state">Select a file to preview its contents</div>
+        </div>
+      </div>
+      </div>
+
+      <!-- Stats tab -->
+      <div id="repo-stats" class="hidden">
+        <div class="stat-cards">
+          <div class="card stat-card"><div class="stat-num" id="stat-files">–</div><div class="muted">Files</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-lines">–</div><div class="muted">Lines of code</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-langs">–</div><div class="muted">Languages</div></div>
+          <div class="card stat-card"><div class="stat-num" id="stat-size">–</div><div class="muted">Total size</div></div>
+        </div>
+        <div class="card lang-card">
+          <div class="pane-title">Languages</div>
+          <div class="lang-bar" id="lang-bar"></div>
+          <table class="repo-table" id="lang-table"><tbody></tbody></table>
         </div>
       </div>
     </section>

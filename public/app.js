@@ -88,8 +88,56 @@ async function openProject(id) {
   $('#browser-title').textContent = data.project.name;
   $('#browser-meta').textContent =
     `${data.project.fileCount} files · ${fmtBytes(data.project.totalBytes)} · created ${new Date(data.project.createdAt).toLocaleDateString()}`;
+  $('#download-btn').href = `/api/projects/${id}/archive`;
+  switchRepoTab('source');
   renderTree($('#search-input').value.trim());
   showView('browser');
+}
+
+function switchRepoTab(tab) {
+  document.querySelectorAll('[data-repotab]').forEach((t) => t.classList.toggle('active', t.dataset.repotab === tab));
+  document.getElementById('repo-source').classList.toggle('hidden', tab !== 'source');
+  document.getElementById('repo-stats').classList.toggle('hidden', tab !== 'stats');
+  if (tab === 'stats') loadStats();
+}
+
+document.querySelectorAll('[data-repotab]').forEach((t) =>
+  t.addEventListener('click', () => switchRepoTab(t.dataset.repotab))
+);
+
+async function loadStats() {
+  const data = await api(`/api/projects/${state.current.id}/stats`);
+  $('#stat-files').textContent = data.totalFiles;
+  $('#stat-lines').textContent = data.totalLines.toLocaleString();
+  $('#stat-langs').textContent = data.languages.length;
+  $('#stat-size').textContent = fmtBytes(data.project.totalBytes);
+
+  const palette = ['lg1', 'lg2', 'lg3', 'lg4', 'lg5', 'lg6', 'lg0'];
+  const total = Math.max(data.languages.reduce((s, l) => s + l.lines, 0), 1);
+  $('#lang-bar').innerHTML = data.languages
+    .slice(0, 7)
+    .map((l, i) => `<div class="${palette[i % palette.length]}" style="flex:${Math.max(l.lines, 0.001)}" title="${esc(l.language)}"></div>`)
+    .join('');
+  document.querySelector('#lang-table tbody').innerHTML = data.languages
+    .map((l, i) => {
+      const pct = ((l.lines / total) * 100).toFixed(1);
+      return `<tr><td><span class="dot ${palette[i % palette.length]}"></span>${esc(l.language)}</td>
+        <td class="num muted">${pct}%</td><td class="num muted">${l.files}</td><td class="num muted">${l.lines.toLocaleString()} lines</td></tr>`;
+    })
+    .join('') || '<tr><td colspan="4"><div class="empty-state">No files</div></td></tr>';
+}
+
+async function renameProject() {
+  const name = prompt('Repository name:', state.current.name);
+  if (name === null) return;
+  const description = prompt('Description:', state.current.description || '') ?? state.current.description;
+  const data = await api('/api/projects/' + state.current.id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description }),
+  });
+  state.current = { ...state.current, ...data.project };
+  $('#browser-title').textContent = data.project.name;
 }
 
 function renderTree(filter = '') {
@@ -111,21 +159,25 @@ function renderTree(filter = '') {
 }
 
 async function viewFile(path) {
+  exitEditMode();
   $('#search-results').classList.add('hidden');
   $('#viewer-empty').classList.add('hidden');
   $('#viewer-path').textContent = path;
   const pre = $('#file-view');
   pre.classList.remove('hidden');
   pre.setAttribute('data-file', path);
+  state.currentFile = path;
   document.querySelectorAll('.tree-file').forEach((f) => f.classList.toggle('active', f.dataset.path === path));
 
   try {
     const data = await api(`/api/projects/${state.current.id}/file?path=${encodeURIComponent(path)}`);
     const code = pre.querySelector('code');
     if (data.binary) {
+      state.currentContent = null;
       pre.innerHTML = `<div class="binary-note">Binary file (${fmtBytes(data.size)}) — <a href="/api/projects/${state.current.id}/raw?path=${encodeURIComponent(path)}">download</a></div>`;
       return;
     }
+    state.currentContent = data.content;
     code.textContent = data.content;
     delete code.dataset.highlighted;
     hljs.highlightElement(code);
@@ -134,32 +186,107 @@ async function viewFile(path) {
   }
 }
 
+// --- Editor -----------------------------------------------------------------
+
+function startEdit() {
+  if (state.currentContent === null || !state.currentFile) return;
+  const pre = $('#file-view');
+  const ed = $('#editor');
+  pre.classList.add('hidden');
+  ed.value = state.currentContent;
+  ed.classList.remove('hidden');
+  $('#edit-btn').classList.add('hidden');
+  $('#save-btn').classList.remove('hidden');
+  $('#cancel-btn').classList.remove('hidden');
+  ed.focus();
+}
+
+function exitEditMode() {
+  $('#editor').classList.add('hidden');
+  $('#save-btn').classList.add('hidden');
+  $('#cancel-btn').classList.add('hidden');
+  if (state.currentFile) $('#edit-btn').classList.remove('hidden');
+}
+
+function cancelEdit() {
+  exitEditMode();
+  viewFile(state.currentFile);
+}
+
+async function saveFile() {
+  const content = $('#editor').value;
+  await api(`/api/projects/${state.current.id}/file`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: state.currentFile, content }),
+  });
+  state.currentContent = content;
+  exitEditMode();
+  viewFile(state.currentFile);
+  refreshProjectMeta();
+}
+
+async function newFile() {
+  const path = prompt('New file path (e.g. src/utils.js):');
+  if (!path) return;
+  await api(`/api/projects/${state.current.id}/file`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content: '' }),
+  });
+  const data = await api(`/api/projects/${state.current.id}/tree`);
+  state.tree = data.entries;
+  renderTree($('#search-input').value.trim());
+  refreshProjectMeta();
+  viewFile(path);
+}
+
+async function refreshProjectMeta() {
+  const meta = await api('/api/projects');
+  const updated = meta.projects.find((p) => p.id === state.current.id);
+  if (updated) {
+    Object.assign(state.current, updated);
+    $('#browser-meta').textContent =
+      `${updated.fileCount} files · ${fmtBytes(updated.totalBytes)} · created ${new Date(updated.createdAt).toLocaleDateString()}`;
+  }
+}
+
 let searchSeq = 0;
 $('#search-input').addEventListener('keydown', async (e) => {
   if (e.key !== 'Enter') return;
   const q = e.target.value.trim();
   if (!q || !state.current) return;
+  const regex = $('#opt-regex').checked ? 1 : 0;
+  const cs = $('#opt-case').checked ? 1 : 0;
   const seq = ++searchSeq;
-  const data = await api(`/api/projects/${state.current.id}/search?q=${encodeURIComponent(q)}`);
-  if (seq !== searchSeq) return;
-  $('#file-view').classList.add('hidden');
-  $('#viewer-empty').classList.add('hidden');
-  $('#viewer-path').textContent = `Results for "${q}"`;
-  const box = $('#search-results');
-  box.classList.remove('hidden');
-  box.innerHTML =
-    `<div class="search-head">${data.results.length}${data.truncated ? '+' : ''} matches — click a result to open the file</div>` +
-    data.results
-      .map(
-        (r) =>
-          `<div class="search-hit" onclick="viewFile('${esc(r.path)}')"><b>${esc(r.path)}:${r.line}</b> — ${esc(r.text)}</div>`
-      )
-      .join('');
+  try {
+    const data = await api(
+      `/api/projects/${state.current.id}/search?q=${encodeURIComponent(q)}&regex=${regex}&case=${cs}`
+    );
+    if (seq !== searchSeq) return;
+    exitEditMode();
+    $('#file-view').classList.add('hidden');
+    $('#viewer-empty').classList.add('hidden');
+    $('#viewer-path').textContent = `Results for "${q}"`;
+    const box = $('#search-results');
+    box.classList.remove('hidden');
+    box.innerHTML =
+      `<div class="search-head">${data.results.length}${data.truncated ? '+' : ''} matches — click a result to open the file</div>` +
+      data.results
+        .map(
+          (r) =>
+            `<div class="search-hit" onclick="viewFile('${esc(r.path)}')"><b>${esc(r.path)}:${r.line}</b> — ${esc(r.text)}</div>`
+        )
+        .join('');
+  } catch (err) {
+    if (seq === searchSeq) {
+      const box = $('#search-results');
+      box.classList.remove('hidden');
+      $('#file-view').classList.add('hidden');
+      box.innerHTML = `<div class="search-head">${esc(err.message)}</div>`;
+    }
+  }
 });
-
-function focusSearch() {
-  $('#search-input').focus();
-}
 
 async function deleteProject() {
   if (!confirm(`Delete repository "${state.current.name}" and all of its files? This cannot be undone.`)) return;
