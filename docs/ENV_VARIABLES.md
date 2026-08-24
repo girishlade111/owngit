@@ -1,16 +1,20 @@
 # Environment Variables (.env) — Complete Reference
 
-> **Project:** LSGit Code Manager (`lsgit-code-manager@0.1.0`) — `package.json:2-3`
-> **Runtime:** Node.js + Express (`server.js:1-3`) on `PORT` (default `3000`, `server.js:601-603`)
-> **Current state (2026-08-23):** The codebase reads **only** `process.env.PORT` directly. All other tunables live as constants in `lib/storage.js:7-15` and `lib/git.js:11-12`. This document describes (a) what exists today, (b) what you should put in `.env` to override it, and (c) the recommended `.env.example` mapping for a 12-factor deployment.
+> **Project:** LSGit Code Manager (`lsgit-code-manager@0.1.0`)
+> **Status (current):** All variables below are **implemented** via the
+> dependency-free loader [`lib/config.js`](../lib/config.js) — an optional `.env`
+> file in the project root is parsed at boot, and real environment variables
+> always win. Supported today: `PORT`, `HOST`, `MAX_UPLOAD_MB`, `MAX_PREVIEW_MB`,
+> `DATA_DIR`. For the short version see
+> [CONFIGURATION.md](CONFIGURATION.md); this page is the deep reference.
 
 ---
 
 ## Table of Contents
 
 1. [Quick Start](#1-quick-start)
-2. [Variables Today — What the Code Actually Reads](#2-variables-today--what-the-code-actually-reads)
-3. [Proposed .env Contract (12-Factor)](#3-proposed-env-contract-12-factor)
+2. [Variables — What the Code Reads](#2-variables--what-the-code-reads)
+3. [The .env Contract](#3-the-env-contract)
 4. [Variable-by-Variable Reference](#4-variable-by-variable-reference)
 5. [Configuration Precedence](#5-configuration-precedence)
 6. [Environments: development / staging / production](#6-environments-development--staging--production)
@@ -49,13 +53,19 @@ No `.env` file is required for local dev; the app falls back to built-ins. For p
 
 ---
 
-## 2. Variables Today — What the Code Actually Reads
+## 2. Variables — What the Code Reads
+
+All five user-facing variables are wired through `lib/config.js`:
 
 | Env var | Read at | Default | Purpose |
 |---------|---------|---------|---------|
-| `PORT` | `server.js:601` | `3000` | HTTP listen port |
+| `PORT` | `lib/config.js` | `3000` | HTTP listen port |
+| `HOST` | `lib/config.js` | `0.0.0.0` | Bind interface (`127.0.0.1` = local only) |
+| `MAX_UPLOAD_MB` | `lib/config.js` → `lib/storage.js` | `200` | Archive/upload cap (MB) |
+| `MAX_PREVIEW_MB` | `lib/config.js` → `lib/storage.js` | `2` | Viewer/search preview cutoff (MB) |
+| `DATA_DIR` | `lib/config.js` → `lib/storage.js` | `<root>/data` | All persistent state |
 
-Everything else is a **hard-coded constant**:
+Everything else remains an internal constant:
 
 | Constant | Location | Value | Notes |
 |----------|----------|-------|-------|
@@ -77,53 +87,31 @@ Everything else is a **hard-coded constant**:
 
 ---
 
-## 3. Proposed .env Contract (12-Factor)
+## 3. The .env Contract
 
-This is the **recommended** contract to adopt. It is backward-compatible: if unset, code falls back to today's defaults.
+The core contract below is **implemented** in `lib/config.js` (MB-based limits,
+`.env` parsing, env-var precedence). The "future extensions" list remains
+optional and backward-compatible: if unset, code falls back to defaults.
 
 ```ini
-# Core
+# Implemented today
 PORT=3000
-NODE_ENV=development
 HOST=0.0.0.0
-LOG_LEVEL=info
-
-# Paths & limits
+MAX_UPLOAD_MB=200
+MAX_PREVIEW_MB=2
 DATA_DIR=./data
-MAX_UPLOAD_BYTES=209715200
-MAX_FILE_VIEW_BYTES=2097152
+```
+
+Future extension candidates (not yet wired):
+
+```ini
 MAX_DIFF_BYTES=1048576
 BLOCKED_EXTENSIONS=.exe,.dll,.so,.bat,.cmd,.sh,.msi,.scr,.com
-AUDIT_FILE=./data/audit.log
-AUDIT_MAX_EVENTS=100
-
-# Git identity
 GIT_AUTHOR_NAME=LSGit
 GIT_AUTHOR_EMAIL=lsgit@local
 GIT_DEFAULT_BRANCH=main
 GIT_LOG_DEPTH=500
-
-# Security (when you add middleware)
-CORS_ORIGINS=http://localhost:3000
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX=100
 ```
-
-Wire-up sketch (not yet in repo — implement as needed):
-
-```js
-// lib/storage.js
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.join(ROOT, 'data');
-const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 200 * 1024 * 1024);
-const BLOCKED_EXTENSIONS = new Set(
-  (process.env.BLOCKED_EXTENSIONS || '.exe,.dll,.so,.bat,.cmd,.sh,.msi,.scr,.com')
-    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-);
-```
-
-Do the same for `lib/git.js:11-12` and `server.js:601`.
 
 ---
 
@@ -132,9 +120,9 @@ Do the same for `lib/git.js:11-12` and `server.js:601`.
 ### 4.1 `PORT`
 
 - **Type:** integer `1–65535`
-- **Default:** `3000` (`server.js:601`)
+- **Default:** `3000`
 - **Example:** `PORT=8080`
-- **Notes:** The only env var the app reads *today*. Change it if `3000` is occupied or for container port mapping.
+- **Notes:** Change it if `3000` is occupied or for container port mapping.
 
 ### 4.2 `NODE_ENV`
 
@@ -146,29 +134,30 @@ Do the same for `lib/git.js:11-12` and `server.js:601`.
 ### 4.3 `HOST`
 
 - **Type:** string (IP or hostname)
-- **Default:** `0.0.0.0` (all interfaces) when you call `app.listen(PORT, HOST)`
-- **Current:** not yet used — `server.js:602` calls `app.listen(PORT)` which binds to all interfaces.
-- **Example:** `HOST=127.0.0.1` to restrict to localhost.
+- **Default:** `0.0.0.0` (all interfaces)
+- **Current:** implemented — `server.js` calls `app.listen(PORT, HOST)`.
+- **Example:** `HOST=127.0.0.1` to restrict to localhost (recommended; also
+  avoids the Windows Firewall first-run prompt).
 
-### 4.4 `DATA_DIR` / `REPOS_DIR` / `META_FILE` / `AUDIT_FILE`
+### 4.4 `DATA_DIR`
 
-- **Type:** path strings
-- **Defaults:** `lib/storage.js:7-10`
-- **Constraints:** Must be writable; `ensureDataDirs()` creates `REPOS_DIR` on boot (`server.js:12`, `lib/storage.js:17-19`). Use absolute paths in production.
-- **Security:** `safeResolve()` (`lib/storage.js:38-46`) enforces traversal protection — keep repo data outside web root.
+- **Type:** path string (absolute, or relative to the project root)
+- **Default:** `<root>/data`
+- **Constraints:** Must be writable; `ensureDataDirs()` creates `<DATA_DIR>/repos` on boot. Use absolute paths for portable installs.
+- **Security:** `safeResolve()` enforces traversal protection — keep repo data outside any web root.
 
-### 4.5 `MAX_UPLOAD_BYTES`
+### 4.5 `MAX_UPLOAD_MB`
 
-- **Type:** integer bytes
-- **Default:** `209715200` (200 MB) `lib/storage.js:12`
-- **Enforced at:** `multer.limits.fileSize` (`server.js:26`) and error handler `LIMIT_FILE_SIZE` → `413` (`server.js:592-596`).
-- **Tuning:** Lower to `50 MB` on small VPS; raise only if you have disk + memory headroom (multer buffers to disk `server.js:22-25`).
+- **Type:** integer megabytes
+- **Default:** `200`
+- **Enforced at:** `multer.limits.fileSize` and the `LIMIT_FILE_SIZE` → `413` error handler.
+- **Tuning:** Lower to `50` on small VPS; raise only with disk headroom (uploads stream to disk under `DATA_DIR`).
 
-### 4.6 `MAX_FILE_VIEW_BYTES`
+### 4.6 `MAX_PREVIEW_MB`
 
-- **Type:** integer bytes
-- **Default:** `2097152` (2 MB) `lib/storage.js:14`
-- **Enforced at:** preview (`server.js:218`), search skip (`server.js:395`), stats snippet (`server.js:341`), binary sniff guard.
+- **Type:** integer megabytes
+- **Default:** `2`
+- **Enforced at:** file preview, search skip, and the stats line-count guard.
 - **Effect:** Larger values allow previewing bigger files but increase memory and response time.
 
 ### 4.7 `MAX_DIFF_BYTES`

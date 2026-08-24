@@ -286,7 +286,8 @@ owngit/
 
 | Document | Contents |
 |----------|----------|
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | `.env` syntax, every variable, precedence, data layout, recipes, platform notes |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Configuration overview: `.env` loading, variables, precedence, data layout, recipes, platform notes |
+| [docs/ENV_VARIABLES.md](docs/ENV_VARIABLES.md) | Deep `.env` reference: syntax rules, variable-by-variable guide, precedence, deployment checklist |
 | [docs/THIRD_PARTY_INTEGRATIONS.md](docs/THIRD_PARTY_INTEGRATIONS.md) | Every dependency: purpose, where used, integration notes, vendoring policy, update guide |
 | [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) | Architecture, codebase tour, backend/frontend patterns, design system, testing, extension walkthrough |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | Every REST endpoint with parameters, responses and curl examples |

@@ -71,6 +71,9 @@ Notes:
 - The frontend reads the effective limits from `GET /api/config` and adjusts the
   upload hint text automatically, so users always see the real cap.
 
+> Deep dive: for line-by-line syntax rules, precedence internals and a
+> variable-by-variable guide, see [ENV_VARIABLES.md](ENV_VARIABLES.md).
+
 ---
 
 ## `.env` file syntax
