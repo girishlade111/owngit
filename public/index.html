@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LSGit — Local Code Manager</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#0e0c09">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/vendor/atom-one-dark.min.css">
 <script src="/vendor/highlight.min.js"></script>
@@ -15,7 +22,21 @@
 <!-- Fixed left sidebar -->
 <aside class="sidebar">
   <a class="brand" href="#" onclick="showView('projects');return false">
-    <svg width="20" height="20" viewBox="0 0 16 10" fill="currentColor"><path d="M.778 1.213a.768.768 0 0 0-.768.892l1.83 10.834a.77.77 0 0 0 .757.641h11.274a.77.77 0 0 0 .756-.642l1.833-10.832a.768.768 0 0 0-.767-.893zm9.998 4.46h-5.55l.223-1.318h5.104z"/></svg>
+    <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true">
+      <defs>
+        <linearGradient id="brandGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#eec26a"/>
+          <stop offset=".55" stop-color="#d9a441"/>
+          <stop offset="1" stop-color="#b3873a"/>
+        </linearGradient>
+      </defs>
+      <rect x="3" y="3" width="58" height="58" rx="14" fill="rgba(217,164,65,.12)"/>
+      <line x1="24" y1="15" x2="24" y2="41" stroke="url(#brandGold)" stroke-width="5.5" stroke-linecap="round"/>
+      <circle cx="24" cy="15" r="7" fill="url(#brandGold)"/>
+      <circle cx="24" cy="45" r="7" fill="url(#brandGold)"/>
+      <circle cx="44" cy="21" r="7" fill="url(#brandGold)"/>
+      <path d="M44 28.5A17 17 0 0 1 27 45" fill="none" stroke="url(#brandGold)" stroke-width="5.5" stroke-linecap="round"/>
+    </svg>
     <span>LSGit</span>
   </a>
 

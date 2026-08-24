@@ -1,0 +1,16 @@
+{
+  "name": "LSGit — Local Code Manager",
+  "short_name": "LSGit",
+  "description": "Local-first source code manager with git versioning. Your data never leaves this device.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0c09",
+  "theme_color": "#0e0c09",
+  "icons": [
+    { "src": "/favicon-16.png", "sizes": "16x16", "type": "image/png" },
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
