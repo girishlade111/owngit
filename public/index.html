@@ -20,21 +20,24 @@
   </a>
 
   <nav class="side-nav">
-    <button class="sidebtn active" data-view="projects" onclick="showView('projects')">
+    <button class="sidebtn active" data-view="projects" data-tip="Projects" onclick="showView('projects')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       <span>Projects</span>
     </button>
-    <button class="sidebtn" data-view="upload" onclick="showView('upload')">
+    <button class="sidebtn" data-view="upload" data-tip="Upload code" onclick="showView('upload')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
       <span>Upload code</span>
     </button>
-    <button class="sidebtn" data-view="audit" onclick="showView('audit')">
+    <button class="sidebtn" data-view="audit" data-tip="Audit log" onclick="showView('audit')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
       <span>Audit log</span>
     </button>
   </nav>
 
   <div class="side-foot">
+    <button class="sb-toggle" id="sb-toggle" title="Toggle sidebar">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
     <div class="side-foot-note">Local-first code manager.<br>Your data never leaves this device.</div>
   </div>
 </aside>

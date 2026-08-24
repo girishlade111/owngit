@@ -151,6 +151,19 @@ function showView(name) {
 
 document.querySelectorAll('.sidebtn').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
 
+// --- Collapsible sidebar (persisted in IndexedDB) ---------------------------
+
+const sidebarEl = document.querySelector('.sidebar');
+
+(async () => {
+  if (await prefs.get('ui:sidebarCollapsed', false)) sidebarEl.classList.add('collapsed');
+})();
+
+$('#sb-toggle').addEventListener('click', async () => {
+  sidebarEl.classList.toggle('collapsed');
+  await prefs.set('ui:sidebarCollapsed', sidebarEl.classList.contains('collapsed'));
+});
+
 // --- Projects ---------------------------------------------------------------
 
 async function loadProjects() {
