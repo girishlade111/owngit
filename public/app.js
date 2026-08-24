@@ -741,7 +741,17 @@ async function deleteProject() {
   await api('/api/projects/' + state.current.id, { method: 'DELETE' });
   await prefs.del?.('last:' + state.current.id);
   state.current = null;
-  showView('projects');
+showView('projects');
+
+// Sync UI limits with server configuration
+(async () => {
+  try {
+    const cfg = await api('/api/config');
+    const hint = $('#upload-hint');
+    if (hint) hint.textContent = `Zip up to ${cfg.maxUploadMB} MB · executables inside archives are rejected`;
+    document.title = `LSGit v${cfg.version} — Local Code Manager`;
+  } catch { /* defaults are fine */ }
+})();
 }
 
 // --- Search -----------------------------------------------------------------

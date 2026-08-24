@@ -8,6 +8,7 @@ const crypto = require('crypto');
 
 const storage = require('./lib/storage');
 const gitlib = require('./lib/git');
+const config = require('./lib/config');
 
 storage.ensureDataDirs();
 
@@ -44,6 +45,14 @@ function saveMeta(meta) {
 }
 
 // --- Routes ----------------------------------------------------------------
+
+app.get('/api/config', (_req, res) => {
+  res.json({
+    version: config.VERSION,
+    maxUploadMB: config.MAX_UPLOAD_MB,
+    maxPreviewMB: config.MAX_PREVIEW_MB,
+  });
+});
 
 app.get('/api/projects', (_req, res) => {
   const meta = storage.readMetadata();
@@ -592,13 +601,12 @@ app.use((err, _req, res, _next) => {
   const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
   const message =
     err.code === 'LIMIT_FILE_SIZE'
-      ? 'Upload exceeds the 200 MB size limit'
+      ? `Upload exceeds the ${config.MAX_UPLOAD_MB} MB size limit`
       : err.message || 'Internal server error';
   if (status === 500) console.error(err);
   res.status(status).json({ error: message });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`LSGit code manager listening on http://localhost:${PORT}`);
+app.listen(config.PORT, config.HOST, () => {
+  console.log(`LSGit code manager listening on http://localhost:${config.PORT}`);
 });
