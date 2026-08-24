@@ -113,8 +113,17 @@
       </div>
       <div class="tabs">
         <button class="tab active" data-repotab="source">Source</button>
+        <button class="tab" data-repotab="commits">Commits</button>
         <button class="tab" data-repotab="stats">Insights</button>
         <div class="tab-spacer"></div>
+        <div class="branch-dd" id="branch-dd">
+          <button class="branch-pill" id="branch-btn" title="Switch branch">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            <span id="branch-name">main</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="branch-menu hidden" id="branch-menu"></div>
+        </div>
         <button class="btn" onclick="renameProject()">Rename</button>
         <a class="btn" id="download-btn" title="Download as zip">Download zip</a>
         <button class="btn primary" onclick="newFile()">+ New file</button>
@@ -124,10 +133,6 @@
       <!-- Source tab (Bitbucket-style) -->
       <div id="repo-source">
         <div class="bb-toolbar">
-          <div class="branch-pill">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
-            main
-          </div>
           <nav class="bb-crumbs" id="bb-crumbs" aria-label="Breadcrumb"></nav>
           <div class="push-right search-group">
             <input type="search" id="search-input" placeholder='Search in repository… ("regex" or "Aa" for options)'>
@@ -150,6 +155,9 @@
           </section>
         </div>
       </div>
+
+      <!-- Commits tab -->
+      <div id="repo-commits" class="hidden"></div>
 
       <!-- Stats tab -->
       <div id="repo-stats" class="hidden">

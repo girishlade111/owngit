@@ -241,6 +241,7 @@ async function openProject(id) {
   }
 
   showView('browser');
+  refreshBranch();
   if (state.currentFile) {
     expandAncestors(state.currentFile);
     renderSidebar($('#tree-filter').value.trim());
@@ -257,8 +258,10 @@ async function openProject(id) {
 function switchRepoTab(tab) {
   document.querySelectorAll('[data-repotab]').forEach((t) => t.classList.toggle('active', t.dataset.repotab === tab));
   document.getElementById('repo-source').classList.toggle('hidden', tab !== 'source');
+  document.getElementById('repo-commits').classList.toggle('hidden', tab !== 'commits');
   document.getElementById('repo-stats').classList.toggle('hidden', tab !== 'stats');
   if (tab === 'stats') loadStats();
+  if (tab === 'commits') loadCommits();
 }
 
 document.querySelectorAll('[data-repotab]').forEach((t) =>
@@ -536,6 +539,7 @@ function renderFileHeader(path, info) {
         : `<button class="btn small" data-act="copy">Copy</button>
            <a class="btn small" href="${raw}" target="_blank" rel="noopener">Raw</a>
            <a class="btn small" href="${raw}" download>Download</a>
+           <button class="btn small" data-act="history">History</button>
            <button class="btn small" data-act="edit">Edit</button>
            <button class="btn small danger subtle" data-act="delete">Delete</button>`}
       ${!editing && !isMarkdown(path)
@@ -633,6 +637,7 @@ $('#bb-content').addEventListener('click', async (e) => {
   else if (act === 'save') saveFile();
   else if (act === 'cancel') cancelEdit();
   else if (act === 'delete') deleteFile(state.currentFile);
+  else if (act === 'history') loadFileHistory(state.currentFile);
   else if (act === 'copy') {
     try {
       await navigator.clipboard.writeText(state.currentContent ?? '');
@@ -766,6 +771,391 @@ $('#bb-content').addEventListener('click', (e) => {
   const hit = e.target.closest('[data-open]');
   if (hit) openFile(hit.dataset.open);
 });
+
+// --- Git versioning (local) ---------------------------------------------------
+
+function relTime(ts) {
+  const s = Date.now() / 1000 - ts;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  if (s < 86400 * 30) return Math.floor(s / 86400) + ' d ago';
+  return new Date(ts * 1000).toLocaleDateString();
+}
+
+const STATUS_LABEL = { added: 'A', modified: 'M', deleted: 'D' };
+
+async function gitApi(path, opts) {
+  return api(`/api/projects/${state.current.id}/git${path}`, opts);
+}
+
+async function refreshBranch() {
+  try {
+    const data = await gitApi('/branches');
+    state.branches = data;
+    $('#branch-name').textContent = data.current;
+  } catch { /* git not critical for browsing */ }
+}
+
+// --- Branch dropdown ---
+
+$('#branch-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = $('#branch-menu');
+  if (!menu.classList.contains('hidden')) { menu.classList.add('hidden'); return; }
+  renderBranchMenu();
+  menu.classList.remove('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#branch-dd')) $('#branch-menu').classList.add('hidden');
+});
+
+function renderBranchMenu() {
+  const data = state.branches || { current: 'main', branches: ['main'] };
+  const items = data.branches.map((b) => {
+    const isCur = b === data.current;
+    return `<div class="branch-item${isCur ? ' current' : ''}" data-branch="${esc(b)}">
+      <span class="branch-check">${isCur ? '✓' : ''}</span><span class="nm">${esc(b)}</span>
+      ${isCur ? '' : '<button class="branch-del" data-del-branch="' + esc(b) + '" title="Delete branch">✕</button>'}
+    </div>`;
+  }).join('');
+  $('#branch-menu').innerHTML =
+    `<div class="branch-list">${items}</div>
+     <div class="branch-new">
+       <input type="text" id="new-branch-name" placeholder="new-branch-name">
+       <button class="btn small" id="create-branch-btn">Create</button>
+     </div>`;
+}
+
+$('#branch-menu').addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-del-branch]');
+  if (del) {
+    e.stopPropagation();
+    if (!confirm(`Delete branch "${del.dataset.delBranch}"?`)) return;
+    try {
+      state.branches = await gitApi(`/branches?name=${encodeURIComponent(del.dataset.delBranch)}`, { method: 'DELETE' });
+      renderBranchMenu();
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  const createBtn = e.target.closest('#create-branch-btn');
+  if (createBtn) {
+    const input = $('#new-branch-name');
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      state.branches = await gitApi('/branches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, checkout: true }),
+      });
+      $('#branch-name').textContent = state.branches.current;
+      $('#branch-menu').classList.add('hidden');
+      await reloadTree();
+      navigate('');
+    } catch (err) { alert(err.message); }
+    return;
+  }
+  const item = e.target.closest('.branch-item');
+  if (item && !item.classList.contains('current')) {
+    try {
+      state.branches = await gitApi('/branches/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: item.dataset.branch }),
+      });
+      $('#branch-name').textContent = state.branches.current;
+      $('#branch-menu').classList.add('hidden');
+      state.currentFile = null;
+      state.cwd = '';
+      await reloadTree();
+      renderCrumbs();
+      renderDir();
+      refreshProjectMeta();
+    } catch (err) { alert(err.message); }
+  }
+});
+
+$('#branch-menu').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter' || e.target.id !== 'new-branch-name') return;
+  const name = e.target.value.trim();
+  if (!name) return;
+  try {
+    state.branches = await gitApi('/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, checkout: true }),
+    });
+    $('#branch-name').textContent = state.branches.current;
+    $('#branch-menu').classList.add('hidden');
+    await reloadTree();
+    navigate('');
+  } catch (err) { alert(err.message); }
+});
+
+// --- Commits tab ---
+
+let commitsSeq = 0;
+let commitsState = { selected: null, showWorking: false };
+
+async function loadCommits() {
+  const seq = ++commitsSeq;
+  const box = $('#repo-commits');
+  box.innerHTML = '<div class="bb-loading muted">Loading history…</div>';
+  let status, logData;
+  try {
+    [status, logData] = await Promise.all([gitApi('/status'), gitApi('/log')]);
+  } catch (err) {
+    if (seq === commitsSeq) box.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+    return;
+  }
+  if (seq !== commitsSeq) return;
+  const commits = logData.commits || [];
+  state.gitStatus = status;
+  // Fresh entry into the tab: if there are uncommitted changes, show the
+  // working copy first; otherwise select the latest commit.
+  commitsState = { selected: null, showWorking: status.files.length > 0 };
+  if (!commitsState.showWorking && commits.length) {
+    commitsState.selected = commits[0].oid;
+  }
+  renderCommitsView(status, commits);
+}
+
+function renderCommitsView(status, commits) {
+  const box = $('#repo-commits');
+  const list = commits.map((c) => {
+    const isHead = c.oid === (commits[0] && commits[0].oid);
+    const sel = commitsState.selected === c.oid && !commitsState.showWorking;
+    return `<div class="commit-item${sel ? ' selected' : ''}" data-oid="${esc(c.oid)}">
+      <div class="commit-top"><span class="commit-hash">${esc(c.short)}</span>
+        ${isHead ? `<span class="badge git-badge">HEAD · ${esc(state.branches?.current || 'main')}</span>` : ''}</div>
+      <div class="commit-msg">${esc(c.message.split('\n')[0])}</div>
+      <div class="commit-meta muted small">${esc(c.author)} · ${relTime(c.timestamp)}</div>
+    </div>`;
+  }).join('');
+
+  const wcCount = status.files.length;
+  const wcItem = `<div class="commit-item working${commitsState.showWorking ? ' selected' : ''}" data-working="1">
+    <div class="commit-top"><span class="wc-dot"></span><b>Working copy</b>
+      ${wcCount ? `<span class="badge git-badge">${wcCount} changed</span>` : '<span class="badge git-badge clean">clean</span>'}</div>
+    <div class="commit-meta muted small">Uncommitted changes</div>
+  </div>`;
+
+  box.innerHTML =
+    `<div class="commits-split">
+       <aside class="commits-list card">${wcItem}${list || '<div class="tree-empty muted">No commits yet</div>'}</aside>
+       <section class="commit-detail card" id="commit-detail"></section>
+     </div>`;
+
+  if (commitsState.showWorking) renderWorkingCopy(status);
+  else if (commitsState.selected) showCommitDetail(commitsState.selected);
+  else $('#commit-detail').innerHTML = '<div class="empty-state">Select a commit</div>';
+}
+
+$('#repo-commits').addEventListener('click', (e) => {
+  const wc = e.target.closest('[data-working]');
+  if (wc) {
+    commitsState = { selected: null, showWorking: true };
+    document.querySelectorAll('.commit-item').forEach((i) => i.classList.toggle('selected', i === wc));
+    renderWorkingCopy(state.gitStatus);
+    return;
+  }
+  const item = e.target.closest('.commit-item[data-oid]');
+  if (!item) return;
+  commitsState = { selected: item.dataset.oid, showWorking: false };
+  document.querySelectorAll('.commit-item').forEach((i) => i.classList.toggle('selected', i === item));
+  showCommitDetail(item.dataset.oid);
+});
+
+async function showCommitDetail(oid) {
+  const box = $('#commit-detail');
+  box.innerHTML = '<div class="bb-loading muted">Loading commit…</div>';
+  let c;
+  try { c = await gitApi(`/commit/${oid}`); } catch (err) { box.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; return; }
+  box.innerHTML =
+    `<div class="cd-head">
+       <div class="cd-msg">${esc(c.message)}</div>
+       <div class="cd-meta muted small"><code>${esc(c.short)}</code> · ${esc(c.author)} · ${new Date(c.timestamp * 1000).toLocaleString()}
+         ${c.parentShort ? ` · parent <code>${esc(c.parentShort)}</code>` : ''}</div>
+     </div>
+     <div class="cd-files-head pane-title">Changed files (${c.files.length})</div>
+     <div class="cd-files">
+       ${c.files.map((f) => `<div class="cd-file" data-cfile="${esc(f.path)}" data-coid="${esc(c.oid)}">
+          <span class="st st-${f.status}">${STATUS_LABEL[f.status]}</span>
+          <span class="nm">${esc(f.path)}</span></div>`).join('') || '<div class="empty-state">No files changed</div>'}
+     </div>
+     <div class="cd-diff" id="cd-diff"></div>`;
+  box.querySelector('.cd-files').addEventListener('click', async (e) => {
+    const f = e.target.closest('[data-cfile]');
+    if (!f) return;
+    box.querySelectorAll('.cd-file').forEach((x) => x.classList.toggle('open', x === f));
+    const diffBox = $('#cd-diff');
+    diffBox.innerHTML = '<div class="bb-loading muted">Loading diff…</div>';
+    try {
+      const d = await gitApi(`/commit/${c.oid}/diff?path=${encodeURIComponent(f.dataset.cfile)}`);
+      diffBox.innerHTML = renderDiffTable(f.dataset.cfile, d);
+    } catch (err) { diffBox.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; }
+  });
+}
+
+// --- Working copy ---
+
+function renderWorkingCopy(status) {
+  const box = $('#commit-detail');
+  box.innerHTML =
+    `<div class="cd-head">
+       <div class="cd-msg">Working copy</div>
+       <div class="cd-meta muted small">${status.files.length} uncommitted change(s) on branch <code>${esc(status.branch)}</code></div>
+     </div>
+     ${status.files.length ? `
+     <div class="cd-files">
+       ${status.files.map((f) => `<div class="cd-file" data-wfile="${esc(f.path)}">
+          <span class="st st-${f.status}">${STATUS_LABEL[f.status]}</span>
+          <span class="nm">${esc(f.path)}</span>
+          ${f.status !== 'added' ? '<button class="btn small danger subtle" data-restore="' + esc(f.path) + '">Restore</button>' : ''}
+        </div>`).join('')}
+     </div>
+     <div class="cd-diff" id="cd-diff"></div>
+     <div class="commit-form">
+       <input type="text" id="commit-message" placeholder="Commit message (e.g. Fix login validation)">
+       <button class="btn primary" id="do-commit">Commit</button>
+       <button class="btn danger subtle" id="discard-all">Discard all</button>
+     </div>` : '<div class="empty-state">Working copy is clean — every change is committed.</div>'}`;
+
+  if (status.files.length) {
+    box.querySelector('.cd-files').addEventListener('click', async (e) => {
+      const r = e.target.closest('[data-restore]');
+      if (r) {
+        if (!confirm(`Restore "${r.dataset.restore}" to the last commit? Local changes will be lost.`)) return;
+        try {
+          const st = await gitApi('/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: r.dataset.restore }) });
+          state.gitStatus = st.status;
+          renderWorkingCopy(st.status);
+          await reloadTree();
+        } catch (err) { alert(err.message); }
+        return;
+      }
+      const f = e.target.closest('[data-wfile]');
+      if (!f) return;
+      box.querySelectorAll('.cd-file').forEach((x) => x.classList.toggle('open', x === f));
+      const diffBox = $('#cd-diff');
+      diffBox.innerHTML = '<div class="bb-loading muted">Loading diff…</div>';
+      try {
+        const d = await gitApi(`/diff?path=${encodeURIComponent(f.dataset.wfile)}`);
+        diffBox.innerHTML = renderDiffTable(f.dataset.wfile, d);
+      } catch (err) { diffBox.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`; }
+    });
+
+    $('#do-commit').addEventListener('click', async () => {
+      const msg = $('#commit-message').value.trim();
+      if (!msg) { alert('Enter a commit message first.'); return; }
+      try {
+        await gitApi('/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) });
+        commitsState = { selected: null, showWorking: false };
+        loadCommits();
+      } catch (err) { alert(err.message); }
+    });
+
+    $('#discard-all').addEventListener('click', async () => {
+      if (!confirm('Discard ALL uncommitted changes? Files return to the last committed state. This cannot be undone.')) return;
+      try {
+        const st = await gitApi('/discard', { method: 'POST' });
+        state.gitStatus = st.status;
+        renderWorkingCopy(st.status);
+        await reloadTree();
+        renderCrumbs();
+        renderDir();
+      } catch (err) { alert(err.message); }
+    });
+
+    $('#commit-message').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#do-commit').click(); }
+    });
+  }
+}
+
+// --- Diff rendering ---
+
+function escLine(s) { return esc(s); }
+
+function renderDiffTable(path, d) {
+  const rows = d.rows || [];
+  const { add, del } = d.stats || { add: 0, del: 0 };
+  return `<div class="diff-head"><span class="nm">${esc(path)}</span>
+      <span class="diff-stat"><span class="d-add">+${add}</span> <span class="d-del">−${del}</span></span></div>
+    <div class="diff-table-wrap"><table class="diff-table"><tbody>
+      ${rows.map((r) => `<tr class="diff-${r.t}">
+        <td class="dn">${r.a ?? ''}</td><td class="dn">${r.b ?? ''}</td>
+        <td class="ds">${r.t === 'add' ? '+' : r.t === 'del' ? '−' : ''}</td>
+        <td class="dc">${escLine(r.s) || ' '}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+// --- File history ---
+
+async function loadFileHistory(path) {
+  const seq = ++fileSeq;
+  renderCrumbs();
+  const wrap = $('#bb-content');
+  wrap.innerHTML = '<div class="bb-loading muted">Loading history…</div>';
+  let commits;
+  try {
+    commits = (await gitApi(`/log?filepath=${encodeURIComponent(path)}`)).commits;
+  } catch (err) {
+    if (seq === fileSeq) wrap.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+    return;
+  }
+  if (seq !== fileSeq) return;
+  wrap.innerHTML =
+    `<div class="bb-file-head">
+       <span class="bb-file-name">${ICON.file}<b>History — ${esc(path)}</b></span>
+       <div class="bb-file-actions"><button class="btn small" data-act="back-latest">Back to latest</button></div>
+     </div>
+     <div class="file-history">
+       ${commits.map((c) => `<div class="commit-item" data-hist-oid="${esc(c.oid)}">
+          <div class="commit-top"><span class="commit-hash">${esc(c.short)}</span></div>
+          <div class="commit-msg">${esc(c.message.split('\n')[0])}</div>
+          <div class="commit-meta muted small">${esc(c.author)} · ${relTime(c.timestamp)}</div>
+        </div>`).join('') || '<div class="empty-state">No history recorded for this file</div>'}
+     </div>`;
+  wrap.querySelector('.file-history').addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-hist-oid]');
+    if (item) viewFileAtCommit(item.dataset.histOid, path);
+  });
+}
+
+async function viewFileAtCommit(oid, path) {
+  const seq = ++fileSeq;
+  state.currentFile = path;
+  state.currentContent = null;
+  renderCrumbs();
+  const wrap = $('#bb-content');
+  wrap.innerHTML = '<div class="bb-loading muted">Loading…</div>';
+  let data;
+  try {
+    data = await gitApi(`/file?oid=${encodeURIComponent(oid)}&path=${encodeURIComponent(path)}`);
+  } catch (err) {
+    if (seq === fileSeq) wrap.innerHTML = `<div class="empty-state">${esc(err.message)}</div>`;
+    return;
+  }
+  if (seq !== fileSeq) return;
+  const lines = data.content.split('\n');
+  const codeLines = highlightToLines(data.content, hljsLang(path));
+  wrap.innerHTML =
+    `<div class="bb-file-head">
+       <span class="bb-file-name">${ICON.file}<b>${esc(path)}</b></span>
+       <span class="badge git-badge">revision ${esc(oid.slice(0, 7))}</span>
+       <span class="muted small">${lines.length.toLocaleString()} lines · ${fmtBytes(data.content.length)}</span>
+       <div class="bb-file-actions">
+         <button class="btn small" data-act="back-latest">Back to latest</button>
+         <a class="btn small" href="/api/projects/${state.current.id}/raw?path=${encodeURIComponent(path)}" download>Download</a>
+       </div>
+     </div>
+     <div class="code-wrap"><table class="code-table"><tbody>
+       ${codeLines.map((l, i) => `<tr><td class="ln" data-ln="${i + 1}">${i + 1}</td><td class="lc">${l || '\n'}</td></tr>`).join('')}
+     </tbody></table></div>`;
+}
 
 // --- Upload -----------------------------------------------------------------
 

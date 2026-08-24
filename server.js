@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const storage = require('./lib/storage');
+const gitlib = require('./lib/git');
 
 storage.ensureDataDirs();
 
@@ -53,7 +54,7 @@ app.get('/api/projects', (_req, res) => {
   res.json({ projects });
 });
 
-app.post('/api/projects/upload', upload.fields([{ name: 'files' }, { name: 'archive' }]), (req, res, next) => {
+app.post('/api/projects/upload', upload.fields([{ name: 'files' }, { name: 'archive' }]), async (req, res, next) => {
   const nameInput = (req.body.name || '').trim();
   const description = (req.body.description || '').trim();
   const archive = (req.files.archive || [])[0];
@@ -108,6 +109,9 @@ app.post('/api/projects/upload', upload.fields([{ name: 'files' }, { name: 'arch
     saveMeta(meta);
 
     storage.audit({ action: 'project.create', projectId: id, name: project.name, actor: req.ip });
+    try {
+      await gitlib.commitAll(destDir, archive ? 'Upload: ' + archive.originalname : 'Upload: ' + looseFiles.length + ' file(s)');
+    } catch (gitErr) { console.error('git snapshot failed:', gitErr.message); }
     res.status(201).json({ project, skippedFiles: stats.skipped || [] });
   } catch (err) {
     fs.rmSync(destDir, { recursive: true, force: true });
@@ -132,7 +136,7 @@ function dirSize(dir) {
 
 // Add files to an existing project via drag & drop
 const addToProject = upload.fields([{ name: 'files' }, { name: 'archive' }]);
-app.post('/api/projects/:id/files', addToProject, (req, res, next) => {
+app.post('/api/projects/:id/files', addToProject, async (req, res, next) => {
   const ctx = getProjectOr404(req, res);
   if (!ctx) return;
   const archive = (req.files.archive || [])[0];
@@ -166,6 +170,9 @@ app.post('/api/projects/:id/files', addToProject, (req, res, next) => {
     }
     touchProject(ctx, { fileCount: countFiles(destDir), totalBytes: dirSize(destDir) });
     storage.audit({ action: 'project.upload', projectId: ctx.project.id, count: added, actor: req.ip });
+    try {
+      await gitlib.commitAll(destDir, archive ? 'Add archive: ' + archive.originalname : 'Add ' + added + ' file(s)');
+    } catch (gitErr) { console.error('git snapshot failed:', gitErr.message); }
     res.json({ ok: true, added, project: publicProject(ctx.project) });
   } catch (err) {
     next(err);
@@ -432,6 +439,149 @@ app.get('/api/audit', (_req, res) => {
   } catch {
     res.json({ events: [] });
   }
+});
+
+// --- Git versioning (local, isomorphic-git) ----------------------------------
+
+function repoDir(ctx) {
+  return path.join(storage.REPOS_DIR, ctx.project.id);
+}
+
+app.get('/api/projects/:id/git/status', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    res.json(await gitlib.status(repoDir(ctx)));
+  } catch (err) { next(err); }
+});
+
+app.post('/api/projects/:id/git/commit', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const message = String(req.body.message || '').trim();
+  if (!message) return res.status(400).json({ error: 'Commit message is required' });
+  try {
+    const oid = await gitlib.commitAll(repoDir(ctx), message);
+    if (!oid) return res.status(400).json({ error: 'Nothing to commit — working copy is clean' });
+    storage.audit({ action: 'git.commit', projectId: ctx.project.id, oid: oid.slice(0, 7), actor: req.ip });
+    const st = await gitlib.status(repoDir(ctx));
+    res.json({ oid, short: oid.slice(0, 7), status: st });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/log', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    const filepath = req.query.filepath ? String(req.query.filepath) : undefined;
+    res.json({ commits: await gitlib.log(repoDir(ctx), filepath) });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/commit/:oid', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    res.json(await gitlib.commitDetail(repoDir(ctx), req.params.oid));
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/commit/:oid/diff', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const filepath = String(req.query.path || '');
+  if (!filepath) return res.status(400).json({ error: 'path is required' });
+  try {
+    res.json({ path: filepath, ...(await gitlib.diffCommitFile(repoDir(ctx), req.params.oid, filepath)) });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/diff', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const filepath = String(req.query.path || '');
+  if (!filepath) return res.status(400).json({ error: 'path is required' });
+  try {
+    res.json({ path: filepath, ...(await gitlib.diffWorkingFile(repoDir(ctx), filepath)) });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/branches', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    res.json(await gitlib.listBranches(repoDir(ctx)));
+  } catch (err) { next(err); }
+});
+
+app.post('/api/projects/:id/git/branches', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Branch name is required' });
+  try {
+    await gitlib.createBranch(repoDir(ctx), name, req.body.checkout !== false);
+    storage.audit({ action: 'git.branch', projectId: ctx.project.id, name, actor: req.ip });
+    res.json(await gitlib.listBranches(repoDir(ctx)));
+  } catch (err) { next(err); }
+});
+
+app.post('/api/projects/:id/git/branches/switch', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Branch name is required' });
+  try {
+    await gitlib.switchBranch(repoDir(ctx), name);
+    storage.audit({ action: 'git.checkout', projectId: ctx.project.id, name, actor: req.ip });
+    touchProject(ctx, { fileCount: countFiles(repoDir(ctx)), totalBytes: dirSize(repoDir(ctx)) });
+    res.json(await gitlib.listBranches(repoDir(ctx)));
+  } catch (err) { next(err); }
+});
+
+app.delete('/api/projects/:id/git/branches', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Branch name is required' });
+  try {
+    await gitlib.deleteBranch(repoDir(ctx), name);
+    res.json(await gitlib.listBranches(repoDir(ctx)));
+  } catch (err) { next(err); }
+});
+
+app.post('/api/projects/:id/git/restore', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const filepath = String(req.body.path || '');
+  if (!filepath) return res.status(400).json({ error: 'path is required' });
+  try {
+    await gitlib.restoreFile(repoDir(ctx), filepath);
+    storage.audit({ action: 'git.restore', projectId: ctx.project.id, path: filepath, actor: req.ip });
+    res.json({ ok: true, status: await gitlib.status(repoDir(ctx)) });
+  } catch (err) { next(err); }
+});
+
+app.post('/api/projects/:id/git/discard', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  try {
+    await gitlib.discardAll(repoDir(ctx));
+    storage.audit({ action: 'git.discard', projectId: ctx.project.id, actor: req.ip });
+    res.json({ ok: true, status: await gitlib.status(repoDir(ctx)) });
+  } catch (err) { next(err); }
+});
+
+app.get('/api/projects/:id/git/file', async (req, res, next) => {
+  const ctx = getProjectOr404(req, res);
+  if (!ctx) return;
+  const filepath = String(req.query.path || '');
+  const oid = String(req.query.oid || '');
+  if (!filepath || !oid) return res.status(400).json({ error: 'path and oid are required' });
+  try {
+    const content = await gitlib.fileAt(repoDir(ctx), oid, filepath);
+    res.json({ path: filepath, oid, content });
+  } catch (err) { next(err); }
 });
 
 // --- Errors ----------------------------------------------------------------
